@@ -1,4 +1,5 @@
 #include "SADXModLoader.h"
+#include "UsercallFunctionHandler.h"
 
 struct LifeBoxLocationData
 {
@@ -349,6 +350,7 @@ LifeBoxLocationData locations[] = {
 	{6297.18f, 312.70f, 1271.14f, LevelAndActIDs_EmeraldCoast1, Characters_Sonic, 1},
 	{6297.18f, 316.95f, 1271.14f, LevelAndActIDs_EmeraldCoast1, Characters_Sonic, 1}, //DC
 	{1078.81f, 656.17f, -748.29f, LevelAndActIDs_EmeraldCoast2, Characters_Sonic, 2},
+	{1078.81f, 650.54f, -748.29f, LevelAndActIDs_EmeraldCoast2, Characters_Sonic, 2},
 	{1086.19f, 650.54f, -753.55f, LevelAndActIDs_EmeraldCoast2, Characters_Sonic, 2}, //DC
 	{3161.46f, -0.28f, -2630.8f, LevelAndActIDs_EmeraldCoast2, Characters_Sonic, 3},
 	{3161.46f, 0.44f, -2630.8f, LevelAndActIDs_EmeraldCoast2, Characters_Sonic, 3}, //DC
@@ -380,6 +382,7 @@ LifeBoxLocationData locations[] = {
 	{-138.84f, 185.0f, -1014.24f, LevelAndActIDs_SpeedHighway3, Characters_Sonic, 23},
 	{14.83f, 0.0f, -1688.95f, LevelAndActIDs_SpeedHighway3, Characters_Sonic, 24},
 	{-534.08f, 1255.3f, -170.27f, LevelAndActIDs_RedMountain1, Characters_Sonic, 25},
+	{-534.08f, 1254.21f, -170.27f, LevelAndActIDs_RedMountain1, Characters_Sonic, 25}, //No Fixed Edition
 	{-855.52f, 1096.57f, -347.76f, LevelAndActIDs_RedMountain1, Characters_Sonic, 26},
 	{-3035.25f, 173.02f, -1385.02f, LevelAndActIDs_RedMountain1, Characters_Sonic, 27},
 	{-3452.31f, 134.38f, -1580.31f, LevelAndActIDs_RedMountain1, Characters_Sonic, 28},
@@ -393,6 +396,7 @@ LifeBoxLocationData locations[] = {
 	{487.7f, -450.0f, 3727.33f, LevelAndActIDs_SkyDeck1, Characters_Sonic, 35},
 	{401.04f, -601.0f, 4220.15f, LevelAndActIDs_SkyDeck1, Characters_Sonic, 36},
 	{401.04f, -599.5f, 4220.15f, LevelAndActIDs_SkyDeck1, Characters_Sonic, 36}, //DX
+	{-277.49f, -38.98f, 2545.97f, LevelAndActIDs_SkyDeck2, Characters_Sonic, 37},  //No fixed edition
 	{-277.3672f, -37.6f, 2546.101f, LevelAndActIDs_SkyDeck2, Characters_Sonic, 37},
 	{-408.93f, -7.59f, 1069.63f, LevelAndActIDs_SkyDeck2, Characters_Sonic, 38},
 	{-473.49f, -2.309165f, 44.75f, LevelAndActIDs_SkyDeck2, Characters_Sonic, 39},
@@ -446,6 +450,7 @@ LifeBoxLocationData locations[] = {
 	{342.68f, 178.18f, 434.17f, LevelAndActIDs_SkyDeck3, Characters_Knuckles, 80},
 	{267.4f, 306.02f, -297.65f, LevelAndActIDs_TwinklePark2, Characters_Amy, 81},
 	{-320.14f, 250.0f, -248.29f, LevelAndActIDs_HotShelter2, Characters_Amy, 82},
+	{-320.14f, 253.95f, -248.29f, LevelAndActIDs_HotShelter2, Characters_Amy, 82}, //No fixed edition
 	{-29.18f, 50.78f, -437.51f, LevelAndActIDs_HotShelter2, Characters_Amy, 83},
 	{538.82f, 1040.0f, -2092.6f, LevelAndActIDs_HotShelter2, Characters_Amy, 84},
 	{ 548.45f, -232.0f, -1552.75f, LevelAndActIDs_FinalEgg1, Characters_Amy, 85},
@@ -486,6 +491,9 @@ extern "C"
 	void setEmblemOverride(SaveFileData* savefile, int character, int stage, int mission);
 	void fixCasino(char no);
 	void killCasinoCube(task* tp);
+	void gameGear();
+	void fixGameOver(int sel);
+	int testUnlockText(char* a1, unsigned __int8 id);
 	__declspec(dllexport) ModInfo SADXModInfo = { ModLoaderVer };
 	__declspec(dllexport) void __cdecl Init(const char* path, const HelperFunctions& helperFunctions)
 	{
@@ -504,6 +512,10 @@ extern "C"
 		//Stop collecting an emblem disabling your controls.
 		WriteCall((void*)0x4B4891, EnableControl);
 		WriteCall((void*)0x4B46C5, EnableControl);
+
+		//Game gear
+		WriteCall((void*)0x4B47D5, gameGear);
+		GenerateUsercallHook(testUnlockText, rEAX, 0x4B53C0, rEAX, rCL);
 
 		WriteData((EMBLEMWNDLIST*)0x10D9DD8, emblemwnd1ist);
 
@@ -538,13 +550,14 @@ extern "C"
 		WriteCall((void*)0x47C226, checkEmblemOverride);
 		WriteCall((void*)0x47C23C, checkEmblemOverride);
 
+		WriteCall((void*)0x42C3AC, fixGameOver);
+
 		//Skip drawing emblems in the trial menu if not Metal Sonic.
 		WriteData((BYTE*)0x50ADC3, (BYTE)0xEB);
 		WriteData((BYTE*)0x50ADC4, (BYTE)0x03);
 		WriteData<3>((BYTE*)0x50ADC5, (BYTE)0x90);
 
 	}
-
 	__declspec(dllexport) void __cdecl OnFrame()
 	{
 		//Stop it assigning adventure field IDs if you're in an action stage.
@@ -567,6 +580,25 @@ extern "C"
 			LastStage = 0;
 		}
 	}
+
+	void fixGameOver(int sel) {
+		FunctionPointer(void, DisplayGameOver, (int sel), 0x42BFD0);
+		LastStage = 0;
+		DisplayGameOver(sel);
+	}
+
+	void gameGear() {
+		FunctionPointer(void, GameGearThing, (), 0x4B5800);
+		if (SubtitleThing_Count == 0) {
+			GameGearThing();
+		}
+	}
+
+	int testUnlockText(char* a1, unsigned __int8 id) {
+	//	return UnlockGamegearGameOrMetalsonic(a1, id);
+		return 0;
+	}
+
 
 	void killCasinoCube(task* tp) {
 		if (GetLevelAndAct() == LevelAndActIDs_Casinopolis2 &&
@@ -706,11 +738,15 @@ extern "C"
 						CurrentStageAndAct == locations[i].level &&
 						CurrentCharacter == locations[i].character) {
 
+
 						//Make the emblem spin and give it an ID.
 						if (tp->twp->ang.x != 0x200) {
 
 							//Tweaks for specific emblems to fix minor issues.
 							switch (locations[i].id) {
+							case 2:
+								tp->twp->pos.y = 650.54f;
+								break;
 							case 9:
 								//Account for rotation.
 								if (CurrentAct == 2) {
@@ -755,9 +791,13 @@ extern "C"
 
 						//Create the Emblem and exit.
 						//For some reason it crashes if the Emblems are still loaded when returning to Casinopolis 1 from SLOT Pinball, so quickly delete them beforehand.
-						if (GetLevelAndAct() != LevelAndActIDs_Casinopolis3 || (GetLevelAndAct() == LevelAndActIDs_Casinopolis3 && (PlayerPtrs[0]->Data1->Position.y > -10.00f || Casino_BallCount > 1))) {
-
-							Emblem_Main((ObjectMaster*)tp);
+						if (GetLevelAndAct() != LevelAndActIDs_Casinopolis3 ||(GetLevelAndAct() == LevelAndActIDs_Casinopolis3 && (PlayerPtrs[0]->Data1->Position.y > -10.00f || Casino_BallCount > 1))) {
+							if (GetLevelAndAct() == LevelAndActIDs_TwinklePark2 && CurrentCharacter == Characters_Amy && PlayerPtrs[0]->Data1->Position.y < 170.0f) {
+								DestroyTask(tp);
+							}
+							else {
+								Emblem_Main((ObjectMaster*)tp);
+							}
 						}
 						else {
 							DestroyTask(tp);
