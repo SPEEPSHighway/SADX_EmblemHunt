@@ -479,6 +479,7 @@ extern "C"
 	float movelength = 32.0f;
 	bool emblemCheckPosition(task* tp, BYTE axis, Float list, int id);
 	int LastStage = 0;
+	bool forcedSonicLayout = false;
 	DataPointer(BYTE, functest, 0x4B4AFA);
 	DataPointer(ADVERTISE_WORK, Advertise_Work, 0x3B2A2F0);
 	int boxToEmblem(task* tp);
@@ -493,6 +494,8 @@ extern "C"
 	void killCasinoCube(task* tp);
 	void gameGear();
 	void fixGameOver(int sel);
+	void getEmblemOverride();
+	int checkSETFile(const char* name, LPVOID* data);
 	int testUnlockText(char* a1, unsigned __int8 id);
 	__declspec(dllexport) ModInfo SADXModInfo = { ModLoaderVer };
 	__declspec(dllexport) void __cdecl Init(const char* path, const HelperFunctions& helperFunctions)
@@ -502,12 +505,9 @@ extern "C"
 		WriteCall((int*)0x4C07DA, boxToEmblem);
 
 		//Stop collecting emblems from stages.
-		WriteData((BYTE*)0x4287EF, (BYTE)0xEB);
-		WriteData((BYTE*)0x4287F0, (BYTE)0x03);
-		WriteData<3>((BYTE*)0x4287F1, (BYTE)0x90);
+		WriteCall((void*)0x4287EF, getEmblemOverride);
 		WriteCall((void*)0x428681, setEmblemOverride);
 		WriteCall((void*)0x4D4802, killCasinoCube);
-
 
 		//Stop collecting an emblem disabling your controls.
 		WriteCall((void*)0x4B4891, EnableControl);
@@ -550,6 +550,8 @@ extern "C"
 		WriteCall((void*)0x47C226, checkEmblemOverride);
 		WriteCall((void*)0x47C23C, checkEmblemOverride);
 
+		WriteCall((void*)0x422A08, checkSETFile);
+
 		WriteCall((void*)0x42C3AC, fixGameOver);
 
 		//Skip drawing emblems in the trial menu if not Metal Sonic.
@@ -578,6 +580,23 @@ extern "C"
 
 		if (GameMode != GameModes_Adventure_ActionStg && GameMode != GameModes_Trial && GameMode != GameModes_Mission && LastStage != 0) {
 			LastStage = 0;
+		}
+	}
+
+	int checkSETFile(const char* name, LPVOID* data) {
+		if (LoadFileWithMalloc(name, data) == -1) {
+			forcedSonicLayout = true;
+		}
+		else {
+			forcedSonicLayout = false;
+		}
+		return LoadFileWithMalloc(name, data);
+	}
+
+	void getEmblemOverride() {
+		VoidFunc(InitGetEmblem, 0x4B4540);
+		if (CurrentLevel > 12) {
+			InitGetEmblem();
 		}
 	}
 
@@ -674,7 +693,7 @@ extern "C"
 	}
 
 	void setEmblemOverride(SaveFileData* savefile, int character, int stage, int mission) {
-		if (MetalSonicFlag) {
+		if (MetalSonicFlag || CurrentLevel > 12) {
 			SetLevelEmblemCollected(savefile, character, stage, mission);
 		}
 	}
@@ -736,7 +755,7 @@ extern "C"
 						emblemCheckPosition(tp, 1, locations[i].y, locations[i].id) &&
 						emblemCheckPosition(tp, 2, locations[i].z, locations[i].id) &&
 						CurrentStageAndAct == locations[i].level &&
-						CurrentCharacter == locations[i].character) {
+						(CurrentCharacter == locations[i].character || forcedSonicLayout == true)) {
 
 
 						//Make the emblem spin and give it an ID.
