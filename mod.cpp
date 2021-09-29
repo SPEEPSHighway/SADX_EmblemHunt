@@ -1,5 +1,7 @@
 #include "SADXModLoader.h"
 #include "UsercallFunctionHandler.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 struct LifeBoxLocationData
 {
@@ -563,7 +565,7 @@ extern "C"
 	__declspec(dllexport) void __cdecl OnFrame()
 	{
 		//Stop it assigning adventure field IDs if you're in an action stage.
-		if (CurrentLevel <= 12) {
+		if (CurrentLevel <= 12 && CurrentLevel >= 1) {
 			if (functest == 0x0F) {
 				WriteJump((int*)0x4B4AFA, (int*)0x4B4B7F);
 			}
@@ -583,19 +585,23 @@ extern "C"
 		}
 	}
 
+	bool actListForcedSonic[5] = { false,false,false,false,false };
 	int checkSETFile(const char* name, LPVOID* data) {
-		if (LoadFileWithMalloc(name, data) == -1) {
-			forcedSonicLayout = true;
-		}
-		else {
-			forcedSonicLayout = false;
+		if (name[6] < 53 && name[6] >= 48) {
+			if (LoadFileWithMalloc(name, data) == -1) {
+				
+				actListForcedSonic[name[6] - 48] = true;
+			}
+			else {
+				actListForcedSonic[name[6] - 48] = false;
+			}
 		}
 		return LoadFileWithMalloc(name, data);
 	}
 
 	void getEmblemOverride() {
 		VoidFunc(InitGetEmblem, 0x4B4540);
-		if (CurrentLevel > 12) {
+		if (CurrentLevel > 12 || CurrentLevel == 0) {
 			InitGetEmblem();
 		}
 	}
@@ -693,7 +699,7 @@ extern "C"
 	}
 
 	void setEmblemOverride(SaveFileData* savefile, int character, int stage, int mission) {
-		if (MetalSonicFlag || CurrentLevel > 12) {
+		if (MetalSonicFlag || (CurrentLevel > 12 || CurrentLevel == 0)) {
 			SetLevelEmblemCollected(savefile, character, stage, mission);
 		}
 	}
@@ -747,7 +753,7 @@ extern "C"
 
 	//Check if the item box being loaded is a 1up. If it is, spawn an emblem and cull the original item box.
 	int boxToEmblem(task* tp) {
-		if (CurrentLevel <= 12) {
+		if (CurrentLevel <= 12 && CurrentLevel > 0) {
 			if ((tp->twp->scl.x >= 6.0f && tp->twp->scl.x < 7.0f) || (tp->twp->scl.x < 1.0f && CurrentStageAndAct == LevelAndActIDs_Casinopolis2)) {
 				//Scan for a match in the location list.
 				for (unsigned int i = 0; i < LengthOfArray(locations); i++) {
@@ -755,7 +761,7 @@ extern "C"
 						emblemCheckPosition(tp, 1, locations[i].y, locations[i].id) &&
 						emblemCheckPosition(tp, 2, locations[i].z, locations[i].id) &&
 						CurrentStageAndAct == locations[i].level &&
-						(CurrentCharacter == locations[i].character || forcedSonicLayout == true)) {
+						(CurrentCharacter == locations[i].character || actListForcedSonic[CurrentAct])) {
 
 
 						//Make the emblem spin and give it an ID.
